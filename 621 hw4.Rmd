@@ -1,0 +1,258 @@
+---
+title: "621 hw 4"
+author: "Tyler Baker"
+date: "2022-11-20"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(psych)
+library(ggplot2)
+library(GGally)
+library(pscl)
+library(car)
+```
+
+## Overview
+
+In this homework assignment, we will explore, analyze and model a data set containing approximately 8000
+records representing a customer at an auto insurance company. Each record has two response variables. The
+first response variable, TARGET_FLAG, is a 1 or a 0. A “1” means that the person was in a car crash. A zero
+means that the person was not in a car crash. The second response variable is TARGET_AMT. This value is zero
+if the person did not crash their car. But if they did crash their car, this number will be a value greater than zero.
+Our objective is to build multiple linear regression and binary logistic regression models on the training data
+to predict the probability that a person will crash their car and also the amount of money it will cost if the person
+does crash their car. We can only use the variables given to you (or variables that you derive from the variables
+provided).
+
+## Assignment Preparation:
+
+For this assignment, the data which is in csv format is available on blackboard. I have couple questions need to think about it before starting the project like HW1. These questions give me the direction.
+
+-Who is my audience for this time?
+-Will anyone audit the report?
+-What is the visual planning process?
+-Is the data contain sensitive information?
+-Any VARIABLE is not useful?
+-Do we have data definition specification?
+
+we decided to upload both crime evaluation data and training data to GitHub so that audience or auditor can access while looking at our report since the data has no sensitive info. This allow audience to review, explore and exchange ideas to myself or other party in the future instead of just reading it. Also, we both agree that it is easier to get people understanding the result if we include visual presentation. 
+
+
+## Table Creation
+
+First of all, we are loading both csv file into R studio. It is very important to review and study the data beforehand instead of just loading it. Understanding the data is the foundation of any reports. It is very difficult to provide useful insight if you do not even understand how the data works. We often need another professional to explain the data when it is needed. In fact, good data set is not easy to find, so checking the data is a must. 
+
+After loading the data, we can see evaluation data has 2141 observation and 26 variable, and training has 8161 observation and 26 variable. It is a big data compare with the one we handle previously. The first question in my mind is how we handle the index. Should we keep the index? Will the index be the important element in between these 2 table? After careful consideration, we decided to delete the index based on the experience from previous projects. We will use ins_test_df table for the rest of the project. Deleting not useful data is something people always forget or miss. It is helpful for audience to understand your data by taking away the useless data to create a nice and clean data set.
+
+
+```{r}
+ins_eval_url <- "https://raw.githubusercontent.com/jayleecunysps/sps621/main/insurance-evaluation-data.csv"
+ins_eval_df <-read.csv(ins_eval_url)
+
+ins_test_url <- "https://raw.githubusercontent.com/jayleecunysps/sps621/main/insurance_training_data.csv"
+ins_test_df <-read.csv(ins_test_url)
+ins_test_df <-select(ins_test_df,-1)
+```
+
+## Data Exploration
+
+After creating the table, we would like to explore the data to gain more knowledge on it as well as learn what limitation we can face in the later part of the project!
+First of all, I want to check what type the variables are. Sometimes wrong type of data crate issue, for example you do not want the money in type of character. You want it to be numeric or integer. If we do not check and explore it at first, it may delay the project timeline.
+For this project, we use **function str** to check the internal structure of the table/list, 
+
+```{r}
+str(ins_test_df)
+```
+
+this function str is used for compactly displaying the internal structure of the table so we can learn about the object and its constituents. As we can see it is all int and chr which is good! I am not seeing NA for now. however, we will double check later with summary!
+
+We can see the table is creating by type of num and int.
+
+We would like to understand the statistics behind of the data that we load to see if it is suitable to use for modeling. How do we do it? We are another R function called **summary**. It can show the mean, median and standard deviation.
+
+From the summary, we can see Age, YOJ, CAR_AGE has NA.
+
+Also we would love to see the result of target column since it is where we can tell whether the TARGET_FLAG is above the median TARGET_FLAG (1) or not (0) (response variable).
+
+
+```{r}
+summary(ins_test_df)
+```
+```{r}
+targetastext <- as.character(ins_test_df$TARGET_FLAG)
+
+data_target <- as.data.frame(table(ins_test_df$TARGET_FLAG))
+data_target
+```
+
+
+```{r}
+ggplot(data_target, aes(x = Var1, y=Freq, fill = Var1)) +
+  geom_bar(stat = "identity") +
+  geom_text(aes(label = Freq), vjust = 0)
+```
+
+We now will handle the NAs. We have decided that if NAs make more than 25% of a column then we will drop that column.Otherwise, we will replace NAs with the mean.
+
+```{r}
+colMeans(is.na(ins_test_df))
+```
+
+So we do not have to drop any columns. We just have to  replacee the NAs on the following columns: age, yoj, and car_age. 
+
+```{r}
+ins_test_df$AGE[is.na(ins_test_df$AGE)] <- mean(ins_test_df$AGE, na.rm = TRUE)
+ins_test_df$YOJ[is.na(ins_test_df$YOJ)] <- mean(ins_test_df$YOJ, na.rm = TRUE)
+ins_test_df$CAR_AGE[is.na(ins_test_df$CAR_AGE)] <- mean(ins_test_df$CAR_AGE, na.rm = TRUE)
+```
+
+We also have data that represents money that should be converted from character to numeric.
+```{r}
+ins_test_df$INCOME <- gsub("\\,", "", ins_test_df$INCOME)
+ins_test_df$INCOME <- as.numeric(gsub("\\$", "", ins_test_df$INCOME))
+ins_test_df$HOME_VAL <- gsub("\\,", "", ins_test_df$HOME_VAL)
+ins_test_df$HOME_VAL <- as.numeric(gsub("\\$", "", ins_test_df$HOME_VAL))
+ins_test_df$BLUEBOOK <- gsub("\\,", "", ins_test_df$BLUEBOOK)
+ins_test_df$BLUEBOOK <- as.numeric(gsub("\\$", "", ins_test_df$BLUEBOOK))
+ins_test_df$OLDCLAIM <- gsub("\\,", "", ins_test_df$OLDCLAIM)
+ins_test_df$OLDCLAIM <- as.numeric(gsub("\\$", "", ins_test_df$OLDCLAIM))
+```
+
+## Data Visualization
+
+Instead of doing data visualizations now, we will save them for later to help us understand our models.
+
+## Creating Models
+
+For this project there are essentially two variables we need to model. First, we need to model who will get into a car crash. Once, we  have figured that out, then we can model how much the expenses will cost.
+
+### Logistic Model
+
+Since we are trying to see if a car was in a crash or not we will use a logistical regression and a probit regression.
+
+We will use the reverse building style. This means we will first use every variable and then eliminate them based on their significance level.
+
+```{r}
+logit <- glm(TARGET_FLAG ~ AGE + BLUEBOOK + CAR_AGE + CAR_TYPE + CAR_USE + CLM_FREQ + EDUCATION + HOMEKIDS + HOME_VAL + INCOME + JOB + KIDSDRIV + MSTATUS + MVR_PTS + OLDCLAIM + PARENT1 + RED_CAR + REVOKED + SEX + TIF + TRAVTIME + URBANICITY + YOJ, data = ins_test_df, family="binomial")
+```
+
+```{r}
+summary(logit)
+```
+```{r}
+logit <- glm(TARGET_FLAG ~ BLUEBOOK + CAR_AGE + CAR_TYPE + CAR_USE + CLM_FREQ + EDUCATION + HOME_VAL + INCOME + JOB + KIDSDRIV + MSTATUS + MVR_PTS + OLDCLAIM + PARENT1 + + REVOKED + TIF + TRAVTIME + URBANICITY, data = ins_test_df, family="binomial")
+```
+
+```{r}
+summary(logit)
+```
+
+### Probit
+
+We will make our probit the same way.
+
+```{r}
+probit <- glm(TARGET_FLAG ~ AGE + BLUEBOOK + CAR_AGE + CAR_TYPE + CAR_USE + CLM_FREQ + EDUCATION + HOMEKIDS + HOME_VAL + INCOME + JOB + KIDSDRIV + MSTATUS + MVR_PTS + OLDCLAIM + PARENT1 + RED_CAR + REVOKED + SEX + TIF + TRAVTIME + URBANICITY + YOJ, data = ins_test_df, family="binomial"(link="probit"))
+```
+
+```{r}
+summary(probit)
+```
+
+```{r}
+probit <- glm(TARGET_FLAG ~ BLUEBOOK + CAR_TYPE + CAR_USE + CLM_FREQ + EDUCATION + HOMEKIDS + HOME_VAL + INCOME + JOB + KIDSDRIV + MSTATUS + MVR_PTS + OLDCLAIM + PARENT1  + REVOKED + TIF + TRAVTIME + URBANICITY , data = ins_test_df, family="binomial"(link="probit"))
+```
+
+```{r}
+summary(probit)
+```
+
+
+### Selecting between these two models. We will use McFadden's Psuedo R Squared to see which is better.
+
+```{r}
+pR2(logit)
+```
+
+```{r}
+pR2(probit)
+```
+The logit outperformed the probit in almost every measure, even though it was just slightly. For that reason, we will just use the logit.
+
+### Linear Regression
+
+This next part we need to find a regression model for the cost estimates of car crashes.
+
+First, we need to seperate our data into only the times that there was a crash.
+
+```{r}
+crash_test <- subset(ins_test_df, TARGET_FLAG == 1)
+```
+
+Now we will build our linear regression model. We will also reverse build this one.
+
+```{r}
+model <- lm(TARGET_AMT ~ AGE + BLUEBOOK + CAR_AGE + CAR_TYPE + CAR_USE + CLM_FREQ + EDUCATION + HOMEKIDS + HOME_VAL + INCOME + JOB + KIDSDRIV + MSTATUS + MVR_PTS + OLDCLAIM + PARENT1 + RED_CAR + REVOKED + SEX + TIF + TRAVTIME + URBANICITY + YOJ, data = crash_test)
+```
+
+```{r}
+summary(model)
+```
+
+```{r}
+model <- lm(TARGET_AMT ~ BLUEBOOK + CAR_AGE + CAR_TYPE + CAR_USE + CLM_FREQ + INCOME  + KIDSDRIV + MSTATUS + MVR_PTS  + PARENT1  + REVOKED + SEX + TIF + TRAVTIME + URBANICITY, data = crash_test)
+```
+
+
+```{r}
+summary(model)
+```
+
+Let's now look at what these plots look like.
+
+```{r}
+hist(crash_test$TARGET_AMT)
+```
+
+Our target variable does not follow a normal distribution. That doesn't necessarily mean anything bad. Let's continue to investigate.
+
+## Model Evaluation
+
+We will evaluate our regression model through diagnostic plots.
+
+```{r}
+par(mfrow = c(2,2))
+plot(model)
+```
+#### The Residuals vs Fitted
+We want to find a straight horizontal line with no pattern in the residuals.
+
+We have close to a horizontal line, with no distinct pattern. However, the residuals do not seem equally spread out either. This maybe problematic.
+
+#### The Normal QQ Plot
+The residuals should follow that 45 degree dashed line. Our's does not. The residuals drift far away at the end. This probably means that there are some outliers.
+
+#### Scale-Location
+This is used to check homoscedasticity. Our line is fairly horizontal, however our residuals do not seem to be evenly spaced out. This means we also have a homoscedasticity problem with our model.
+
+#### Residuals vs Leverage
+If there are any points within the red dashed line, then that means that the residual is an outlier. We have some outliers within our data.
+
+Our linear model is not going to cut it.
+
+## Forecasting
+
+We will only be able to forecast if there was a crash or not.
+
+```{r}
+prd <- logit %>% predict(ins_eval_df, type="response")
+predicted.classes <- ifelse(prd > 0.5, 1, 0)
+```
+
+```{r}
+ins_eval_df$predictions <- predicted.classes
+```
+
